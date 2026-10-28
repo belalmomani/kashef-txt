@@ -73,5 +73,5 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // Start.io SDK (prepared; initialized only when ads are enabled and an App ID is supplied)
-    implementation("com.startapp:inapp-sdk:5.+")
+    implementation("com.startapp:inapp-sdk:5.3.1")
 }

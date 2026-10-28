@@ -10,15 +10,9 @@ import com.startapp.sdk.adsbase.StartAppSDK
  * No ad is shown anywhere in the UI yet; ad placement belongs to the dedicated ads phase.
  */
 object AdManager {
-    @Volatile var ready: Boolean = false
-        private set
-
     fun initIfEnabled(context: Context) {
         if (!BuildConfig.ADS_ENABLED || BuildConfig.STARTIO_APP_ID.isBlank()) return
-        StartAppSDK.setTestAdsEnabled(BuildConfig.DEBUG)
-        StartAppSDK.initParams(context, BuildConfig.STARTIO_APP_ID)
-            .setReturnAdsEnabled(false)
-            .setCallback { ready = true }
-            .init()
+        // Documented signature: init(context, appId, returnAdsEnabled)
+        StartAppSDK.init(context, BuildConfig.STARTIO_APP_ID, false)
     }
 }
