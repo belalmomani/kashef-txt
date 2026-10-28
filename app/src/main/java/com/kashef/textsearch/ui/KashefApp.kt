@@ -49,6 +49,8 @@ fun KashefApp() {
                         } else investigating = true
                     },
                 )
+            } else if (tab == BottomTab.Settings) {
+                SettingsScreen()
             } else {
                 ComingSoon(tab.label)
             }
