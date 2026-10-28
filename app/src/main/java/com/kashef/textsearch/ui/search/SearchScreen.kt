@@ -66,13 +66,13 @@ private val runningLines = listOf(
 private fun dialogue(ui: ScanUi): String {
     val s = ui.snap
     return when (ui.stage) {
-        Stage.Running -> runningLines[(s.scanned / 15) % runningLines.size]
-        Stage.Finished -> when {
+        ScanStage.Running -> runningLines[(s.scanned / 15) % runningLines.size]
+        ScanStage.Finished -> when {
             s.matchedFiles > 0 -> "وجدت العبارة في ${s.matchedFiles} ملف! القضية تتحرك."
             else -> "أعتذر، لم أجد العبارة في الملفات التي فحصتها."
         }
-        Stage.Cancelled -> "أوقفتَ التحقيق. ما وجدته حتى الآن معروض أمامك."
-        Stage.Failed -> "تعثّر التحقيق: ${ui.message}"
+        ScanStage.Cancelled -> "أوقفتَ التحقيق. ما وجدته حتى الآن معروض أمامك."
+        ScanStage.Failed -> "تعثّر التحقيق: ${ui.message}"
     }
 }
 
@@ -80,7 +80,7 @@ private fun dialogue(ui: ScanUi): String {
 fun SearchScreen(ui: ScanUi, onStop: () -> Unit, onBack: () -> Unit, onRetry: () -> Unit) {
     BackHandler { onBack() }
     val s = ui.snap
-    val running = ui.stage == Stage.Running
+    val running = ui.stage == ScanStage.Running
 
     val transition = rememberInfiniteTransition(label = "float")
     val wave by transition.animateFloat(
@@ -88,7 +88,7 @@ fun SearchScreen(ui: ScanUi, onStop: () -> Unit, onBack: () -> Unit, onRetry: ()
         animationSpec = infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "wave",
     )
-    val tilt by animateFloatAsState(if (ui.stage == Stage.Finished && s.matchedFiles > 0) -6f else 0f, label = "tilt")
+    val tilt by animateFloatAsState(if (ui.stage == ScanStage.Finished && s.matchedFiles > 0) -6f else 0f, label = "tilt")
     val density = LocalDensity.current.density
     val floatY = if (running) wave else 0f
 
@@ -158,7 +158,7 @@ private fun StatusCard(ui: ScanUi) {
     Card {
         Text("الملفات المفحوصة فعلًا: ${s.scanned}", color = TextPrimary, fontSize = 14.sp)
         Text("الملفات المطابقة: ${s.matchedFiles} (إجمالي المطابقات: ${s.matchCount})", color = TextPrimary, fontSize = 14.sp)
-        if (ui.stage == Stage.Running && s.current.isNotEmpty()) {
+        if (ui.stage == ScanStage.Running && s.current.isNotEmpty()) {
             Text("أفحص الآن: ${s.current}", color = TextSecondary, fontSize = 12.sp)
         }
         if (s.unsupportedDocs > 0) {
@@ -172,13 +172,13 @@ private fun StatusCard(ui: ScanUi) {
                 "توقف البحث عند حد ${ScanAccumulator.MAX_TOTAL_MATCHES} مطابقة؛ قد توجد نتائج أخرى.",
                 color = Gold400, fontSize = 12.sp,
             )
-            ui.stage == Stage.Finished -> Text(
+            ui.stage == ScanStage.Finished -> Text(
                 "اكتمل المرور على المجلدات المختارة (للأنواع المدعومة فقط).",
                 color = TextSecondary, fontSize = 12.sp,
             )
-            ui.stage == Stage.Cancelled -> Text("أُوقف البحث قبل اكتمال المرور؛ النتائج جزئية.", color = Gold400, fontSize = 12.sp)
+            ui.stage == ScanStage.Cancelled -> Text("أُوقف البحث قبل اكتمال المرور؛ النتائج جزئية.", color = Gold400, fontSize = 12.sp)
         }
-        if (ui.stage != Stage.Running) {
+        if (ui.stage != ScanStage.Running) {
             Text("الوقت: ${"%.1f".format(s.elapsedMs / 1000.0)} ثانية", color = TextSecondary, fontSize = 12.sp)
         }
     }

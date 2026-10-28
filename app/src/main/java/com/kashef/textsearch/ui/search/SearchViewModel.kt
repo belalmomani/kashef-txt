@@ -26,10 +26,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-enum class Stage { Running, Finished, Cancelled, Failed }
+enum class ScanStage { Running, Finished, Cancelled, Failed }
 
 data class ScanUi(
-    val stage: Stage,
+    val stage: ScanStage,
     val snap: ScanSnapshot,
     val query: String,
     val scopeTitle: String,
@@ -106,7 +106,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         val acc = ScanAccumulator()
         val t0 = System.nanoTime()
         fun ms() = (System.nanoTime() - t0) / 1_000_000
-        _ui.value = ScanUi(Stage.Running, acc.snapshot(false, 0), shownQuery, title, modeLabel)
+        _ui.value = ScanUi(ScanStage.Running, acc.snapshot(false, 0), shownQuery, title, modeLabel)
 
         job = viewModelScope.launch(Dispatchers.IO) {
             var last = 0L
@@ -114,7 +114,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                 val now = System.nanoTime()
                 if (now - last > 200_000_000L) {
                     last = now
-                    _ui.value = ScanUi(Stage.Running, acc.snapshot(false, ms()), shownQuery, title, modeLabel)
+                    _ui.value = ScanUi(ScanStage.Running, acc.snapshot(false, ms()), shownQuery, title, modeLabel)
                 }
             }
             try {
@@ -123,13 +123,13 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                     scanner.scan(r)
                     if (acc.stop) break
                 }
-                _ui.value = ScanUi(Stage.Finished, acc.snapshot(true, ms()), shownQuery, title, modeLabel)
+                _ui.value = ScanUi(ScanStage.Finished, acc.snapshot(true, ms()), shownQuery, title, modeLabel)
             } catch (e: CancellationException) {
-                if (!closed) _ui.value = ScanUi(Stage.Cancelled, acc.snapshot(false, ms()), shownQuery, title, modeLabel)
+                if (!closed) _ui.value = ScanUi(ScanStage.Cancelled, acc.snapshot(false, ms()), shownQuery, title, modeLabel)
                 throw e
             } catch (e: Exception) {
                 _ui.value = ScanUi(
-                    Stage.Failed, acc.snapshot(false, ms()), shownQuery, title, modeLabel,
+                    ScanStage.Failed, acc.snapshot(false, ms()), shownQuery, title, modeLabel,
                     e.message ?: e.javaClass.simpleName,
                 )
             }
