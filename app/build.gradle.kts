@@ -24,8 +24,8 @@ android {
         applicationId = "com.kashef.textsearch"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0-phase2"
+        versionCode = 3
+        versionName = "0.2.1-phase2"
         buildConfigField("boolean", "ADS_ENABLED", adsEnabled.toString())
         buildConfigField("String", "STARTIO_APP_ID", "\"$startioAppId\"")
     }

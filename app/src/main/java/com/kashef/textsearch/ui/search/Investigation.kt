@@ -1,6 +1,15 @@
 package com.kashef.textsearch.ui.search
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -73,6 +82,16 @@ fun InvestigationScreen(query: String, scopeTitle: String, onBack: () -> Unit) {
 
     BackHandler { onBack() }
 
+    val transition = rememberInfiniteTransition(label = "float")
+    val wave by transition.animateFloat(
+        initialValue = -7f, targetValue = 7f,
+        animationSpec = infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "wave",
+    )
+    val floatY = if (stage == Stage.Running) wave else 0f
+    val tilt by animateFloatAsState(if (stage == Stage.Finished) -6f else 0f, label = "tilt")
+    val density = LocalDensity.current.density
+
     // Cancelling = changing `stage`, which cancels this coroutine automatically.
     LaunchedEffect(runId, stage) {
         if (stage != Stage.Running) return@LaunchedEffect
@@ -92,10 +111,18 @@ fun InvestigationScreen(query: String, scopeTitle: String, onBack: () -> Unit) {
         Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        // Character + speech bubble
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Big character (floats while investigating, tilts when the simulation finishes) + speech bubble
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painterResource(R.drawable.kashef_character), "كاشف",
+                Modifier.height(270.dp).graphicsLayer {
+                    translationY = floatY * density
+                    rotationZ = tilt
+                },
+                contentScale = ContentScale.Fit,
+            )
             Column(
-                Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(CardNavy)
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardNavy)
                     .border(BorderStroke(1.dp, Outline), RoundedCornerShape(20.dp)).padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -109,10 +136,6 @@ fun InvestigationScreen(query: String, scopeTitle: String, onBack: () -> Unit) {
                     color = TextPrimary, fontSize = 15.sp,
                 )
             }
-            Image(
-                painterResource(R.drawable.kashef_character), "كاشف",
-                Modifier.height(150.dp), contentScale = ContentScale.Fit,
-            )
         }
 
         InfoCard {
