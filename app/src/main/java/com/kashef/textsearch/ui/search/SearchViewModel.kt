@@ -18,6 +18,7 @@ import com.kashef.textsearch.engine.ScopeFilter
 import com.kashef.textsearch.engine.SearchMode
 import com.kashef.textsearch.engine.SearchQuery
 import com.kashef.textsearch.engine.TreeScanner
+import com.kashef.textsearch.ui.overlay.OverlayController
 import com.kashef.textsearch.ui.scopes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +60,11 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     var mode by mutableStateOf(SearchMode.Phrase)
     val folders = mutableStateListOf<String>()
 
+    val overlay = OverlayController(app)
+    var overlayEnabled by mutableStateOf(prefs.getBoolean("overlay", true))
+        private set
+    private var inForeground = true
+
     private val _ui = MutableStateFlow<ScanUi?>(null)
     val ui: StateFlow<ScanUi?> = _ui
 
@@ -66,9 +72,27 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var closed = false
 
     init {
+        viewModelScope.launch { ui.collect { refreshOverlay() } }
         // Keep only folders whose read permission is still granted by Android.
         val granted = resolver.persistedUriPermissions.filter { it.isReadPermission }.map { it.uri.toString() }.toSet()
         prefs.getStringSet("folders", emptySet())?.filter { it in granted }?.sorted()?.let { folders.addAll(it) }
+    }
+
+    private fun refreshOverlay() = overlay.render(_ui.value, overlayEnabled && !inForeground)
+
+    fun setForeground(v: Boolean) {
+        inForeground = v
+        refreshOverlay()
+    }
+
+    fun setOverlayEnabled(v: Boolean) {
+        overlayEnabled = v
+        prefs.edit().putBoolean("overlay", v).apply()
+        refreshOverlay()
+    }
+
+    override fun onCleared() {
+        overlay.hide()
     }
 
     private fun saveFolders() = prefs.edit().putStringSet("folders", folders.toSet()).apply()
@@ -103,6 +127,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
 
         job?.cancel()
         closed = false
+        overlay.newRun()
         val acc = ScanAccumulator()
         val t0 = System.nanoTime()
         fun ms() = (System.nanoTime() - t0) / 1_000_000

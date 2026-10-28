@@ -183,6 +183,10 @@ fun HomeScreen(
             scopes.forEachIndexed { i, s -> ScopeRow(s, selected = i == selected) { onSelect(i) } }
         }
 
+        Text(
+            "لإظهار كاشف فوق التطبيقات عند مغادرة التطبيق أثناء البحث: الإعدادات ← كاشف فوق التطبيقات.",
+            color = TextSecondary, fontSize = 11.sp,
+        )
         Button(
             onClick = onStart,
             modifier = Modifier.fillMaxWidth().height(56.dp),

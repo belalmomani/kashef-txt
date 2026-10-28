@@ -70,7 +70,7 @@ fun KashefApp(vm: SearchViewModel = viewModel()) {
                     onStart = ::startSearch,
                 )
             } else if (tab == BottomTab.Settings) {
-                SettingsScreen()
+                SettingsScreen(vm)
             } else {
                 ComingSoon(tab.label)
             }

@@ -63,7 +63,7 @@ private val runningLines = listOf(
     "أتابع الأدلة سطرًا سطرًا...",
 )
 
-private fun dialogue(ui: ScanUi): String {
+fun dialogue(ui: ScanUi): String {
     val s = ui.snap
     return when (ui.stage) {
         ScanStage.Running -> runningLines[(s.scanned / 15) % runningLines.size]
