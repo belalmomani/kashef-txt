@@ -18,7 +18,7 @@ val adsEnabled: Boolean = (System.getenv("ADS_ENABLED") ?: "false").equals("true
 
 android {
     namespace = "com.kashef.textsearch"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.kashef.textsearch"
