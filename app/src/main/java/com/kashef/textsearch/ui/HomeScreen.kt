@@ -31,6 +31,12 @@ import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import com.kashef.textsearch.engine.SearchMode
+import com.kashef.textsearch.ui.search.folderLabel
+import com.kashef.textsearch.ui.search.label
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -66,10 +72,10 @@ private const val SAMPLE_QUERY = "المشروع يحتاج إلى قاعدة ب
 data class ScopeOption(val title: String, val subtitle: String, val icon: ImageVector)
 
 val scopes = listOf(
-    ScopeOption("كل الملفات النصية المتاحة", "TXT, MD, CSV, JSON, XML, …", Icons.Outlined.Description),
-    ScopeOption("المستندات", "PDF, DOCX, TXT, …", Icons.Outlined.PictureAsPdf),
-    ScopeOption("ملفات البرمجة والأكواد", "Kotlin, Java, HTML, JSON, XML, JS, …", Icons.Outlined.Code),
-    ScopeOption("الملاحظات والملفات النصية", "TXT, MD, Notes, CSV, …", Icons.Outlined.NoteAlt),
+    ScopeOption("كل الملفات النصية المتاحة", "TXT, MD, CSV, JSON, XML, HTML, أكواد", Icons.Outlined.Description),
+    ScopeOption("المستندات", "TXT الآن؛ PDF وDOCX لاحقًا", Icons.Outlined.PictureAsPdf),
+    ScopeOption("ملفات البرمجة والأكواد", "Kotlin, Java, HTML, JSON, XML, JS", Icons.Outlined.Code),
+    ScopeOption("الملاحظات والملفات النصية", "TXT, MD, CSV, LOG", Icons.Outlined.NoteAlt),
 )
 
 @Composable
@@ -78,6 +84,11 @@ fun HomeScreen(
     onQueryChange: (String) -> Unit,
     selected: Int,
     onSelect: (Int) -> Unit,
+    mode: SearchMode,
+    onMode: (SearchMode) -> Unit,
+    folders: List<String>,
+    onAddFolder: () -> Unit,
+    onRemoveFolder: (String) -> Unit,
     onStart: () -> Unit,
 ) {
     Column(
@@ -123,11 +134,46 @@ fun HomeScreen(
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.Lightbulb, null, tint = Gold400, modifier = Modifier.size(18.dp))
                 Text(
-                    "يمكنك البحث عن كلمة أو جملة كاملة داخل محتوى الملفات، وليس في أسماء الملفات.",
+                    "يبحث داخل محتوى الملفات وليس في أسمائها. المطابقة تتجاهل حالة الأحرف الإنجليزية والتشكيل والتطويل، وتحسب علامات الترقيم، وتتم داخل السطر الواحد.",
                     color = TextSecondary, fontSize = 12.sp,
                 )
             }
-            Text("البحث الفعلي داخل الملفات غير موصول بعد (المرحلة الثالثة)؛ التدفق الحالي محاكاة.", color = Gold400, fontSize = 11.sp)
+            Text("PDF وDOCX والصور الممسوحة (OCR) لم تُدعم بعد؛ تُفحص الملفات النصية والأكواد فقط.", color = Gold400, fontSize = 11.sp)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SearchMode.entries.forEach { m ->
+                    ModeChip(m.label(), m == mode, Modifier.weight(1f)) { onMode(m) }
+                }
+            }
+            Text(
+                when (mode) {
+                    SearchMode.Phrase -> "يطابق العبارة كما كتبتها داخل السطر الواحد."
+                    SearchMode.AllWords -> "يجب أن تظهر كل الكلمات في السطر نفسه (تطابق جزئي داخل الكلمة)."
+                    SearchMode.AnyWord -> "يعرض أي سطر فيه كلمة واحدة على الأقل (تطابق جزئي داخل الكلمة)."
+                },
+                color = TextSecondary, fontSize = 11.sp,
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Outlined.CreateNewFolder, null, tint = Gold400)
+                Text("المجلدات المسموح بالبحث فيها", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            }
+            if (folders.isEmpty()) {
+                Text("لم تختر أي مجلد بعد. لن يقرأ التطبيق إلا ما تسمح به.", color = TextSecondary, fontSize = 12.sp)
+            }
+            folders.forEach { f ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .border(BorderStroke(1.dp, Outline.copy(alpha = 0.5f)), RoundedCornerShape(14.dp))
+                        .padding(start = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(folderLabel(f), color = TextPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { onRemoveFolder(f) }) { Icon(Icons.Outlined.Close, "إزالة المجلد", tint = TextSecondary) }
+                }
+            }
+            OutlinedButton(onClick = onAddFolder, modifier = Modifier.fillMaxWidth()) { Text("إضافة مجلد") }
+
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.FolderOpen, null, tint = Gold400)
@@ -205,4 +251,17 @@ private fun ScopeRow(option: ScopeOption, selected: Boolean, onClick: () -> Unit
             contentAlignment = Alignment.Center,
         ) { if (selected) Box(Modifier.size(12.dp).clip(CircleShape).background(Blue400)) }
     }
+}
+
+
+@Composable
+private fun ModeChip(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        modifier.clip(shape)
+            .background(if (selected) Blue500.copy(alpha = 0.25f) else Color.Transparent)
+            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) Blue400 else Outline.copy(alpha = 0.5f)), shape)
+            .clickable(onClick = onClick).padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, color = TextPrimary, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
 }

@@ -23,6 +23,20 @@ jobs:
         with:
           gradle-version: 8.9
 
+      # Search-engine unit tests. Informational: a failure here does not block the APK build.
+      - name: Unit tests
+        id: unit_tests
+        continue-on-error: true
+        run: gradle testDebugUnitTest --stacktrace
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/**
+          if-no-files-found: ignore
+
       # Optional signing: only if the secrets exist. Without them the APK is signed with the debug key.
       - name: Prepare keystore (optional)
         env:

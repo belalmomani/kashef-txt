@@ -24,8 +24,8 @@ android {
         applicationId = "com.kashef.textsearch"
         minSdk = 24
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.2.2-phase2"
+        versionCode = 5
+        versionName = "0.3.0-phase3"
         buildConfigField("boolean", "ADS_ENABLED", adsEnabled.toString())
         buildConfigField("String", "STARTIO_APP_ID", "\"$startioAppId\"")
     }
@@ -71,6 +71,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    testImplementation("junit:junit:4.13.2")
 
     // Start.io SDK (prepared; initialized only when ads are enabled and an App ID is supplied)
     implementation("com.startapp:inapp-sdk:5.3.1")
