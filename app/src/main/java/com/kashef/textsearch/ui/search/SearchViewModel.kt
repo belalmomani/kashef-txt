@@ -85,7 +85,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         refreshOverlay()
     }
 
-    fun setOverlayEnabled(v: Boolean) {
+    fun updateOverlayEnabled(v: Boolean) {
         overlayEnabled = v
         prefs.edit().putBoolean("overlay", v).apply()
         refreshOverlay()

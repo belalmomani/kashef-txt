@@ -69,7 +69,7 @@ fun SettingsScreen(vm: SearchViewModel) {
                     "إظهار كاشف فوق التطبيقات الأخرى عند مغادرة التطبيق أثناء البحث",
                     color = TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f),
                 )
-                Switch(checked = vm.overlayEnabled, onCheckedChange = { vm.setOverlayEnabled(it) })
+                Switch(checked = vm.overlayEnabled, onCheckedChange = { vm.updateOverlayEnabled(it) })
             }
             Line("إذن «الظهور فوق التطبيقات»", if (canDraw) "ممنوح" else "غير ممنوح")
             if (!canDraw) {
