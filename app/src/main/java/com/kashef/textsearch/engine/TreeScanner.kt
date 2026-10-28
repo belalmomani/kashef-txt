@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.Locale
