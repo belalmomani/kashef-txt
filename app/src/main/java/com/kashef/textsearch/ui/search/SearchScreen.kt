@@ -100,8 +100,8 @@ fun SearchScreen(ui: ScanUi, onStop: () -> Unit, onBack: () -> Unit, onRetry: ()
         item {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Image(
-                    painterResource(R.drawable.kashef_character), "كاشف",
-                    Modifier.height(230.dp).graphicsLayer {
+                    painterResource(R.drawable.kashef_full), "كاشف",
+                    Modifier.height(280.dp).graphicsLayer {
                         translationY = floatY * density
                         rotationZ = tilt
                     },
