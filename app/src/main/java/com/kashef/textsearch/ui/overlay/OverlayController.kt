@@ -59,9 +59,11 @@ class OverlayController(private val app: Application) {
     private var chip: TextView? = null
     private var charBox: FrameLayout? = null
     private var ring: View? = null
-    private var torso: ImageView? = null
-    private var legL: ImageView? = null
-    private var legR: ImageView? = null
+    private var upper: FrameLayout? = null // torso + lens ring: they lean together
+    private var hipL: FrameLayout? = null
+    private var hipR: FrameLayout? = null
+    private var kneeL: ImageView? = null
+    private var kneeR: ImageView? = null
     private var lp: WindowManager.LayoutParams? = null
     private val animators = ArrayList<Animator>()
 
@@ -163,31 +165,31 @@ class OverlayController(private val app: Application) {
         animators.clear()
         ring?.apply { visibility = View.INVISIBLE; scaleX = 1f; scaleY = 1f; alpha = 1f }
         charBox?.apply { rotation = 0f; translationY = 0f }
-        listOfNotNull(torso, legL, legR).forEach { it.rotation = 0f; it.translationY = 0f; it.scaleY = 1f }
+        listOfNotNull<View>(upper, hipL, hipR, kneeL, kneeR).forEach { it.rotation = 0f }
     }
 
     private fun ease(u: Float) = u * u * (3f - 2f * u)
 
     /**
-     * Stance (t in 0..0.6): the foot is planted and the leg swings from forward to back at the
-     * same rate the body moves, so the foot does not slide on the ground.
-     * Swing (t in 0.6..1): the leg lifts, folds (shorter) and swings forward through the air.
-     * Rotation is negative toward the facing direction (right).
+     * Stance (t in 0..0.6): the foot is planted and the leg swings from forward to back at the same
+     * rate the body moves, so the foot does not slide; the knee flexes only slightly.
+     * Swing (t in 0.6..1): the hip swings the leg forward while the KNEE BENDS (the shin folds back)
+     * and then straightens before the foot lands.
+     * Rotation is negative toward the facing direction (right); a positive knee angle folds the shin back.
      */
-    private fun pose(leg: ImageView?, t: Float) {
-        if (leg == null) return
-        val reach = 16f
+    private fun pose(hip: View?, knee: View?, t: Float) {
+        if (hip == null || knee == null) return
+        val reach = 14f
         val stance = 0.6f
+        val pi = PI.toFloat()
         if (t < stance) {
-            leg.rotation = -reach + 2f * reach * (t / stance)
-            leg.translationY = 0f
-            leg.scaleY = 1f
+            val k = t / stance
+            hip.rotation = -reach + 2f * reach * k
+            knee.rotation = 4f * sin(pi * k)
         } else {
             val u = (t - stance) / (1f - stance)
-            val lift = sin(PI.toFloat() * u)
-            leg.rotation = reach - 2f * reach * ease(u)
-            leg.translationY = -lift * 7f * dp
-            leg.scaleY = 1f - 0.10f * lift
+            hip.rotation = reach - 2f * reach * ease(u)
+            knee.rotation = 32f * sin(pi * u)
         }
     }
 
@@ -204,14 +206,14 @@ class OverlayController(private val app: Application) {
         // the other leg is offset by half a cycle, so there is a short moment with both feet down.
         phase += dt / 1200f
         phase -= kotlin.math.floor(phase)
-        pose(legL, phase)
-        pose(legR, (phase + 0.5f) % 1f)
-        torso?.rotation = 2f // slight forward lean
+        pose(hipL, kneeL, phase)
+        pose(hipR, kneeR, (phase + 0.5f) % 1f)
+        upper?.rotation = 2f // slight forward lean; the lens ring leans with it
 
         if (dragging) return
         val screenW = app.resources.displayMetrics.widthPixels
         val w = if (v.width > 0) v.width else (BUBBLE_W * dp).toInt()
-        xf += dir * 40 * dp * dt / 1000f
+        xf += dir * 34 * dp * dt / 1000f // matches the planted foot speed of the gait
         val maxX = (screenW - w).coerceAtLeast(0).toFloat()
         if (xf >= maxX) { xf = maxX; dir = -1 }
         if (xf <= 0f) { xf = 0f; dir = 1 }
@@ -264,25 +266,35 @@ class OverlayController(private val app: Application) {
         // Lens centre in the artwork: 70.9% across, 22.3% down.
         val box = FrameLayout(app)
         box.clipChildren = false // the swinging legs may extend past the box
+        val bw = (BODY_W * dp).toInt()
+        val bh = (BODY_H * dp).toInt()
         fun layer(res: Int) = ImageView(app).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
             setImageResource(res)
         }
-        val bw = (BODY_W * dp).toInt()
-        val bh = (BODY_H * dp).toInt()
-        val legBack = layer(R.drawable.kashef_leg_r).apply { // hip pivots measured on the artwork
-            pivotX = 0.6881f * bw; pivotY = 0.7158f * bh
+        fun full() = FrameLayout.LayoutParams(bw, bh, Gravity.TOP or Gravity.START)
+
+        // One leg = a hip container (rotates at the hip) holding the shin (rotates at the knee) behind
+        // the thigh, whose round cap hides the joint. Pivots are fractions of the artwork, measured on the pieces.
+        fun leg(thigh: Int, shin: Int, hipX: Float, hipY: Float, kneeX: Float, kneeY: Float): Pair<FrameLayout, ImageView> {
+            val shinV = layer(shin).apply { pivotX = kneeX * bw; pivotY = kneeY * bh }
+            val hip = FrameLayout(app).apply {
+                clipChildren = false
+                pivotX = hipX * bw; pivotY = hipY * bh
+                addView(shinV, full())
+                addView(layer(thigh), full())
+            }
+            return hip to shinV
         }
-        val legFront = layer(R.drawable.kashef_leg_l).apply {
-            pivotX = 0.3682f * bw; pivotY = 0.7158f * bh
-        }
-        val torsoView = layer(R.drawable.kashef_torso).apply {
+        val (hipRView, kneeRView) = leg(R.drawable.kashef_thigh_r, R.drawable.kashef_shin_r, 0.6881f, 0.7158f, 0.6849f, 0.8101f)
+        val (hipLView, kneeLView) = leg(R.drawable.kashef_thigh_l, R.drawable.kashef_shin_l, 0.3682f, 0.7158f, 0.2918f, 0.8101f)
+
+        // Torso and the lens ring lean together, so the ring stays on the lens (lens: 70.9% across, 22.3% down).
+        val upperView = FrameLayout(app).apply {
+            clipChildren = false
             pivotX = bw / 2f; pivotY = bh.toFloat()
         }
-        // Legs sit behind the torso so the coat hem hides the joints.
-        box.addView(legBack, FrameLayout.LayoutParams(bw, bh, Gravity.TOP or Gravity.START))
-        box.addView(legFront, FrameLayout.LayoutParams(bw, bh, Gravity.TOP or Gravity.START))
-        box.addView(torsoView, FrameLayout.LayoutParams(bw, bh, Gravity.TOP or Gravity.START))
+        upperView.addView(layer(R.drawable.kashef_torso), full())
         val ringDp = 22
         val lensRing = View(app).apply {
             background = GradientDrawable().apply {
@@ -292,13 +304,17 @@ class OverlayController(private val app: Application) {
             }
             visibility = View.INVISIBLE
         }
-        box.addView(
+        upperView.addView(
             lensRing,
             FrameLayout.LayoutParams((ringDp * dp).toInt(), (ringDp * dp).toInt(), Gravity.TOP or Gravity.START).apply {
                 leftMargin = ((0.709f * BODY_W - ringDp / 2f) * dp).toInt()
                 topMargin = ((0.223f * BODY_H - ringDp / 2f) * dp).toInt()
             },
         )
+        // Legs sit behind the torso so the coat hem hides the hips.
+        box.addView(hipRView, full())
+        box.addView(hipLView, full())
+        box.addView(upperView, full())
 
         val column = LinearLayout(app).apply {
             orientation = LinearLayout.VERTICAL
@@ -371,9 +387,11 @@ class OverlayController(private val app: Application) {
         chip = fileChip
         charBox = box
         ring = lensRing
-        torso = torsoView
-        legL = legFront
-        legR = legBack
+        upper = upperView
+        hipL = hipLView
+        hipR = hipRView
+        kneeL = kneeLView
+        kneeR = kneeRView
         lp = params
         running = false
         lastName = ""
@@ -389,9 +407,11 @@ class OverlayController(private val app: Application) {
         chip = null
         charBox = null
         ring = null
-        torso = null
-        legL = null
-        legR = null
+        upper = null
+        hipL = null
+        hipR = null
+        kneeL = null
+        kneeR = null
         lp = null
         running = false
         dragging = false
