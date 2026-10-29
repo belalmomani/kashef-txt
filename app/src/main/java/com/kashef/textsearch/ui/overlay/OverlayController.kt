@@ -163,7 +163,32 @@ class OverlayController(private val app: Application) {
         animators.clear()
         ring?.apply { visibility = View.INVISIBLE; scaleX = 1f; scaleY = 1f; alpha = 1f }
         charBox?.apply { rotation = 0f; translationY = 0f }
-        listOfNotNull(torso, legL, legR).forEach { it.rotation = 0f; it.translationY = 0f }
+        listOfNotNull(torso, legL, legR).forEach { it.rotation = 0f; it.translationY = 0f; it.scaleY = 1f }
+    }
+
+    private fun ease(u: Float) = u * u * (3f - 2f * u)
+
+    /**
+     * Stance (t in 0..0.6): the foot is planted and the leg swings from forward to back at the
+     * same rate the body moves, so the foot does not slide on the ground.
+     * Swing (t in 0.6..1): the leg lifts, folds (shorter) and swings forward through the air.
+     * Rotation is negative toward the facing direction (right).
+     */
+    private fun pose(leg: ImageView?, t: Float) {
+        if (leg == null) return
+        val reach = 16f
+        val stance = 0.6f
+        if (t < stance) {
+            leg.rotation = -reach + 2f * reach * (t / stance)
+            leg.translationY = 0f
+            leg.scaleY = 1f
+        } else {
+            val u = (t - stance) / (1f - stance)
+            val lift = sin(PI.toFloat() * u)
+            leg.rotation = reach - 2f * reach * ease(u)
+            leg.translationY = -lift * 7f * dp
+            leg.scaleY = 1f - 0.10f * lift
+        }
     }
 
     /** One animation frame, driven by the display's vsync (ValueAnimator), so motion is smooth. */
@@ -175,12 +200,13 @@ class OverlayController(private val app: Application) {
         val dt = if (lastFrame == 0L) 16L else (now - lastFrame).coerceIn(1L, 64L)
         lastFrame = now
 
-        // Legs swing in opposite directions with a smooth sine; the torso only sways slightly (no bouncing).
-        phase += dt / 1000f * (2f * PI.toFloat() * 1.25f)
-        val sw = sin(phase)
-        legL?.rotation = sw * 16f
-        legR?.rotation = -sw * 16f
-        torso?.rotation = sw * 1.5f
+        // Gait: one full cycle (two steps) takes 1.2 s. Each leg is on the ground for 60% of its cycle,
+        // the other leg is offset by half a cycle, so there is a short moment with both feet down.
+        phase += dt / 1200f
+        phase -= kotlin.math.floor(phase)
+        pose(legL, phase)
+        pose(legR, (phase + 0.5f) % 1f)
+        torso?.rotation = 2f // slight forward lean
 
         if (dragging) return
         val screenW = app.resources.displayMetrics.widthPixels
