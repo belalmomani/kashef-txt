@@ -17,6 +17,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -26,13 +27,15 @@ import com.kashef.textsearch.ui.search.ScanStage
 import com.kashef.textsearch.ui.search.ScanUi
 import com.kashef.textsearch.ui.search.dialogue
 import java.util.Locale
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.sin
 
 /**
  * Full-body Kashef investigating over other apps (needs the "Display over other apps" permission).
  * Shown only while the app is in the background and a search is running or just finished.
  *
- * While searching he patrols left and right with a waddle, a ring pulses on his magnifier lens,
+ * While searching he walks left and right (legs swing smoothly from the hips), a ring pulses on his magnifier lens,
  * and a chip shows the name of the file that is REALLY being scanned. He stops when the search ends.
  * Drag to move; tap to dismiss for the current search. Call on the main thread.
  */
@@ -56,6 +59,9 @@ class OverlayController(private val app: Application) {
     private var chip: TextView? = null
     private var charBox: FrameLayout? = null
     private var ring: View? = null
+    private var torso: ImageView? = null
+    private var legL: ImageView? = null
+    private var legR: ImageView? = null
     private var lp: WindowManager.LayoutParams? = null
     private val animators = ArrayList<Animator>()
 
@@ -64,20 +70,14 @@ class OverlayController(private val app: Application) {
     private var dragging = false
     private var dir = 1
     private var xf = 0f
-    private var lastTick = 0L
+    private var lastFrame = 0L
+    private var phase = 0f
     private var lastName = ""
 
     private val autoHide = Runnable {
         dismissed = true
         hide()
     }
-    private val tick = object : Runnable {
-        override fun run() {
-            step()
-            main.postDelayed(this, 33)
-        }
-    }
-
     fun canDraw(): Boolean = Settings.canDrawOverlays(app)
 
     fun newRun() {
@@ -135,8 +135,16 @@ class OverlayController(private val app: Application) {
         if (nowRunning && !running) {
             box.pivotX = BODY_W * dp / 2
             box.pivotY = BODY_H * dp
-            loop(ObjectAnimator.ofFloat(box, View.ROTATION, -4f, 4f), 380)          // waddle
-            loop(ObjectAnimator.ofFloat(box, View.TRANSLATION_Y, 0f, -4 * dp), 190)  // step bounce
+            // Walk cycle: one vsync-driven animator moves the window and swings the legs together.
+            lastFrame = 0L
+            val walker = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 1000
+                repeatCount = ValueAnimator.INFINITE
+                interpolator = LinearInterpolator()
+                addUpdateListener { onFrame() }
+                start()
+            }
+            animators.add(walker)
             ring?.let { r ->
                 r.visibility = View.VISIBLE
                 loop(ObjectAnimator.ofFloat(r, View.SCALE_X, 0.9f, 1.25f), 450)
@@ -155,20 +163,30 @@ class OverlayController(private val app: Application) {
         animators.clear()
         ring?.apply { visibility = View.INVISIBLE; scaleX = 1f; scaleY = 1f; alpha = 1f }
         charBox?.apply { rotation = 0f; translationY = 0f }
+        listOfNotNull(torso, legL, legR).forEach { it.rotation = 0f; it.translationY = 0f }
     }
 
-    private fun step() {
+    /** One animation frame, driven by the display's vsync (ValueAnimator), so motion is smooth. */
+    private fun onFrame() {
         val v = root ?: return
         val p = lp ?: return
         val box = charBox ?: return
         val now = SystemClock.uptimeMillis()
-        val dt = if (lastTick == 0L) 33L else (now - lastTick).coerceAtMost(100L)
-        lastTick = now
-        if (!running || dragging) return
-        val sw = app.resources.displayMetrics.widthPixels
+        val dt = if (lastFrame == 0L) 16L else (now - lastFrame).coerceIn(1L, 64L)
+        lastFrame = now
+
+        // Legs swing in opposite directions with a smooth sine; the torso only sways slightly (no bouncing).
+        phase += dt / 1000f * (2f * PI.toFloat() * 1.25f)
+        val sw = sin(phase)
+        legL?.rotation = sw * 16f
+        legR?.rotation = -sw * 16f
+        torso?.rotation = sw * 1.5f
+
+        if (dragging) return
+        val screenW = app.resources.displayMetrics.widthPixels
         val w = if (v.width > 0) v.width else (BUBBLE_W * dp).toInt()
-        xf += dir * 45 * dp * dt / 1000f
-        val maxX = (sw - w).coerceAtLeast(0).toFloat()
+        xf += dir * 40 * dp * dt / 1000f
+        val maxX = (screenW - w).coerceAtLeast(0).toFloat()
         if (xf >= maxX) { xf = maxX; dir = -1 }
         if (xf <= 0f) { xf = 0f; dir = 1 }
         box.scaleX = if (dir > 0) 1f else -1f // the artwork faces right; the lens ring flips with it
@@ -219,11 +237,26 @@ class OverlayController(private val app: Application) {
         // Full-body character and the lens ring, in one box so they flip together.
         // Lens centre in the artwork: 70.9% across, 22.3% down.
         val box = FrameLayout(app)
-        val body = ImageView(app).apply {
+        box.clipChildren = false // the swinging legs may extend past the box
+        fun layer(res: Int) = ImageView(app).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setImageResource(R.drawable.kashef_full)
+            setImageResource(res)
         }
-        box.addView(body, FrameLayout.LayoutParams((BODY_W * dp).toInt(), (BODY_H * dp).toInt(), Gravity.TOP or Gravity.START))
+        val bw = (BODY_W * dp).toInt()
+        val bh = (BODY_H * dp).toInt()
+        val legBack = layer(R.drawable.kashef_leg_r).apply { // hip pivots measured on the artwork
+            pivotX = 0.6881f * bw; pivotY = 0.7158f * bh
+        }
+        val legFront = layer(R.drawable.kashef_leg_l).apply {
+            pivotX = 0.3682f * bw; pivotY = 0.7158f * bh
+        }
+        val torsoView = layer(R.drawable.kashef_torso).apply {
+            pivotX = bw / 2f; pivotY = bh.toFloat()
+        }
+        // Legs sit behind the torso so the coat hem hides the joints.
+        box.addView(legBack, FrameLayout.LayoutParams(bw, bh, Gravity.TOP or Gravity.START))
+        box.addView(legFront, FrameLayout.LayoutParams(bw, bh, Gravity.TOP or Gravity.START))
+        box.addView(torsoView, FrameLayout.LayoutParams(bw, bh, Gravity.TOP or Gravity.START))
         val ringDp = 22
         val lensRing = View(app).apply {
             background = GradientDrawable().apply {
@@ -244,6 +277,7 @@ class OverlayController(private val app: Application) {
         val column = LinearLayout(app).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
+            clipChildren = false
             addView(tv, LinearLayout.LayoutParams((BUBBLE_W * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(
                 fileChip,
@@ -311,18 +345,17 @@ class OverlayController(private val app: Application) {
         chip = fileChip
         charBox = box
         ring = lensRing
+        torso = torsoView
+        legL = legFront
+        legR = legBack
         lp = params
         running = false
         lastName = ""
-        lastTick = 0L
-        main.removeCallbacks(tick)
-        main.postDelayed(tick, 33)
         return true
     }
 
     fun hide() {
         main.removeCallbacks(autoHide)
-        main.removeCallbacks(tick)
         stopAnims()
         root?.let { try { wm.removeView(it) } catch (ex: Exception) { } }
         root = null
@@ -330,6 +363,9 @@ class OverlayController(private val app: Application) {
         chip = null
         charBox = null
         ring = null
+        torso = null
+        legL = null
+        legR = null
         lp = null
         running = false
         dragging = false
