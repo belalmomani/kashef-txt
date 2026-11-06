@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        AdManager.initIfEnabled(applicationContext) // no-op unless ads are enabled in the build
+        AdManager.initIfEnabled(applicationContext, vm.adsPersonalized, vm.adsConsentTime) // no-op unless ads are enabled in the build
         setContent {
             // The app is Arabic-first: force RTL for the whole UI.
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {

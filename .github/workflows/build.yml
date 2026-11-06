@@ -5,9 +5,17 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       # Public certificate fingerprint of the intended signing key (not a secret).
       EXPECTED_SHA256: "A6:E6:B7:DA:63:D0:CB:3C:92:A6:1A:5B:36:E1:0A:A1:29:BB:06:55:9E:86:A0:AB:CA:2C:58:64:AA:55:CC:89"
@@ -23,20 +31,6 @@ jobs:
         with:
           gradle-version: 8.9
 
-      # Search-engine unit tests. Informational: a failure here does not block the APK build.
-      - name: Unit tests
-        id: unit_tests
-        continue-on-error: true
-        run: gradle testDebugUnitTest --stacktrace
-
-      - name: Upload test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-report
-          path: app/build/reports/tests/**
-          if-no-files-found: ignore
-
       # Optional signing: only if the secrets exist. Without them the APK is signed with the debug key.
       - name: Prepare keystore (optional)
         env:
@@ -51,12 +45,25 @@ jobs:
             echo "HAS_KEYSTORE=false" >> "$GITHUB_ENV"
           fi
 
+      # Search-engine unit tests. A failure BLOCKS a signed release build; for debug builds it is informational.
+      - name: Unit tests
+        continue-on-error: ${{ env.HAS_KEYSTORE != 'true' }}
+        run: gradle testDebugUnitTest --stacktrace
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/**
+          if-no-files-found: ignore
+
       - name: Build APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          # Ads stay off in phase 1. Enable later via repository variable ADS_ENABLED and secret STARTIO_APP_ID.
+          # Ads stay off unless the repository variable ADS_ENABLED=true and the secret STARTIO_APP_ID exist.
           ADS_ENABLED: ${{ vars.ADS_ENABLED }}
           STARTIO_APP_ID: ${{ secrets.STARTIO_APP_ID }}
         run: |
@@ -66,7 +73,9 @@ jobs:
             gradle assembleDebug --stacktrace
           fi
 
-      - name: Show APK signing certificate
+      - name: Verify APK signing certificate
+        env:
+          ENFORCE_SIGNATURE: ${{ vars.ENFORCE_SIGNATURE }}
         run: |
           APK=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
           echo "APK: $APK"
@@ -74,9 +83,25 @@ jobs:
           "$APKSIGNER" verify --print-certs "$APK" | tee certs.txt
           GOT=$(grep -i "SHA-256 digest" certs.txt | head -n1 | awk '{print $NF}' | tr -d ':' | tr 'A-F' 'a-f')
           WANT=$(echo "$EXPECTED_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
-          if [ "$GOT" = "$WANT" ]; then echo "SIGNING CHECK: matches the expected key"; else echo "SIGNING CHECK: does NOT match the expected key (informational only)"; fi
+          if [ "$GOT" = "$WANT" ]; then
+            echo "SIGNING CHECK: matches the expected key"
+          else
+            echo "SIGNING CHECK: does NOT match the expected key"
+            # Set the repository variable ENFORCE_SIGNATURE=true to make a mismatch fail the build.
+            if [ "$ENFORCE_SIGNATURE" = "true" ]; then exit 1; fi
+          fi
+
+      - name: Collect APK with version in its name
+        run: |
+          VN=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          VC=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts)
+          KIND=$([ "$HAS_KEYSTORE" = "true" ] && echo release || echo debug)
+          APK=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+          mkdir -p dist
+          cp "$APK" "dist/kashef-text-search-${VN}-code${VC}-${KIND}.apk"
+          (cd dist && sha256sum *.apk | tee SHA256SUMS.txt)
 
       - uses: actions/upload-artifact@v4
         with:
           name: kashef-text-search-apk
-          path: app/build/outputs/apk/**/*.apk
+          path: dist/*

@@ -32,6 +32,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import com.kashef.textsearch.engine.SearchMode
@@ -72,8 +73,8 @@ private const val SAMPLE_QUERY = "المشروع يحتاج إلى قاعدة ب
 data class ScopeOption(val title: String, val subtitle: String, val icon: ImageVector)
 
 val scopes = listOf(
-    ScopeOption("كل الملفات النصية المتاحة", "TXT, MD, CSV, JSON, XML, HTML, أكواد", Icons.Outlined.Description),
-    ScopeOption("المستندات", "TXT الآن؛ PDF وDOCX لاحقًا", Icons.Outlined.PictureAsPdf),
+    ScopeOption("كل الملفات النصية المتاحة", "TXT, MD, CSV, JSON, XML, DOCX, أكواد", Icons.Outlined.Description),
+    ScopeOption("المستندات", "TXT, DOCX, ODT", Icons.Outlined.PictureAsPdf),
     ScopeOption("ملفات البرمجة والأكواد", "Kotlin, Java, HTML, JSON, XML, JS", Icons.Outlined.Code),
     ScopeOption("الملاحظات والملفات النصية", "TXT, MD, CSV, LOG", Icons.Outlined.NoteAlt),
 )
@@ -86,6 +87,8 @@ fun HomeScreen(
     onSelect: (Int) -> Unit,
     mode: SearchMode,
     onMode: (SearchMode) -> Unit,
+    flexible: Boolean,
+    onFlexible: (Boolean) -> Unit,
     folders: List<String>,
     onAddFolder: () -> Unit,
     onRemoveFolder: (String) -> Unit,
@@ -138,7 +141,7 @@ fun HomeScreen(
                     color = TextSecondary, fontSize = 12.sp,
                 )
             }
-            Text("PDF وDOCX والصور الممسوحة (OCR) لم تُدعم بعد؛ تُفحص الملفات النصية والأكواد فقط.", color = Gold400, fontSize = 11.sp)
+            Text("PDF وDOC وXLSX والصور الممسوحة (OCR) لم تُدعم بعد؛ تُفحص الملفات النصية والأكواد ومستندات DOCX وODT.", color = Gold400, fontSize = 11.sp)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SearchMode.entries.forEach { m ->
@@ -153,6 +156,13 @@ fun HomeScreen(
                 },
                 color = TextSecondary, fontSize = 11.sp,
             )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "بحث مرن في أشكال الحروف العربية (أ إ آ = ا، ى = ي، ة = ه)",
+                    color = TextPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f),
+                )
+                Switch(checked = flexible, onCheckedChange = onFlexible)
+            }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.CreateNewFolder, null, tint = Gold400)
@@ -199,6 +209,8 @@ fun HomeScreen(
             Spacer(Modifier.size(8.dp))
             Icon(Icons.AutoMirrored.Outlined.ArrowBack, null) // points left = forward in RTL
         }
+        Spacer(Modifier.height(8.dp))
+        AdBanner()
         Spacer(Modifier.height(8.dp))
     }
 }

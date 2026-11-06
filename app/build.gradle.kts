@@ -24,8 +24,8 @@ android {
         applicationId = "com.kashef.textsearch"
         minSdk = 24
         targetSdk = 34
-        versionCode = 13
-        versionName = "0.3.8-phase3"
+        versionCode = 21
+        versionName = "1.1.0-rc1"
         buildConfigField("boolean", "ADS_ENABLED", adsEnabled.toString())
         buildConfigField("String", "STARTIO_APP_ID", "\"$startioAppId\"")
     }
@@ -49,6 +49,12 @@ android {
             isMinifyEnabled = false
             if (hasSigning) signingConfig = signingConfigs.getByName("kashef")
         }
+    }
+
+    // Release builds must not fail on lint warnings (the APK is sideloaded); unit tests are the gate.
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 
     compileOptions {

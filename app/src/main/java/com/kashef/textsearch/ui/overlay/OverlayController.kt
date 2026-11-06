@@ -5,6 +5,7 @@ import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.app.Application
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -45,8 +46,8 @@ class OverlayController(private val app: Application) {
     private val dp = app.resources.displayMetrics.density
 
     private companion object {
-        const val BODY_W = 92 // dp; the artwork is 321x800 so 92x230 keeps its proportions
-        const val BODY_H = 230
+        const val BODY_W = 46 // dp (half of the previous size); the artwork is 321x800
+        const val BODY_H = 115
         const val BUBBLE_W = 210
         val CODE_EXT = setOf(
             "kt", "kts", "java", "js", "ts", "py", "c", "cpp", "h", "cs", "go", "rs", "php", "rb", "sql",
@@ -60,10 +61,8 @@ class OverlayController(private val app: Application) {
     private var charBox: FrameLayout? = null
     private var ring: View? = null
     private var upper: FrameLayout? = null // torso + lens ring: they lean together
-    private var hipL: FrameLayout? = null
-    private var hipR: FrameLayout? = null
-    private var kneeL: ImageView? = null
-    private var kneeR: ImageView? = null
+    private var legL: BendLegView? = null
+    private var legR: BendLegView? = null
     private var lp: WindowManager.LayoutParams? = null
     private val animators = ArrayList<Animator>()
 
@@ -74,6 +73,10 @@ class OverlayController(private val app: Application) {
     private var xf = 0f
     private var lastFrame = 0L
     private var phase = 0f
+    private var runTime = 0L   // ms since the walk started (for the gentle start)
+    private var turnT = 220f   // ms into the current turn-around (220 = not turning)
+    private var faceFrom = 1f
+    private var faceTo = 1f
     private var lastName = ""
 
     private val autoHide = Runnable {
@@ -139,6 +142,9 @@ class OverlayController(private val app: Application) {
             box.pivotY = BODY_H * dp
             // Walk cycle: one vsync-driven animator moves the window and swings the legs together.
             lastFrame = 0L
+            runTime = 0L
+            turnT = 220f
+            box.scaleX = if (dir > 0) 1f else -1f
             val walker = ValueAnimator.ofFloat(0f, 1f).apply {
                 duration = 1000
                 repeatCount = ValueAnimator.INFINITE
@@ -154,43 +160,75 @@ class OverlayController(private val app: Application) {
                 loop(ObjectAnimator.ofFloat(r, View.ALPHA, 0.5f, 1f), 450)
             }
         } else if (!nowRunning && running) {
-            stopAnims()
+            stopAnims(true)
         }
         running = nowRunning
         if (!nowRunning) box.rotation = if (celebrate) -5f else 0f
     }
 
-    private fun stopAnims() {
+    private fun stopAnims(smooth: Boolean = false) {
         animators.forEach { it.cancel() }
         animators.clear()
         ring?.apply { visibility = View.INVISIBLE; scaleX = 1f; scaleY = 1f; alpha = 1f }
         charBox?.apply { rotation = 0f; translationY = 0f }
-        listOfNotNull<View>(upper, hipL, hipR, kneeL, kneeR).forEach { it.rotation = 0f }
+        upper?.apply { rotation = 0f; translationY = 0f }
+        for (leg in listOf(legL, legR)) {
+            if (leg == null) continue
+            if (!smooth) {
+                leg.hip = 0f; leg.knee = 0f; leg.ankle = 0f
+                continue
+            }
+            // Settle the legs back to standing instead of snapping.
+            val h0 = leg.hip
+            val k0 = leg.knee
+            val a0 = leg.ankle
+            val settle = ValueAnimator.ofFloat(1f, 0f).apply {
+                duration = 250
+                addUpdateListener {
+                    val f = it.animatedValue as Float
+                    leg.hip = h0 * f; leg.knee = k0 * f; leg.ankle = a0 * f
+                }
+                start()
+            }
+            animators.add(settle)
+        }
     }
 
     private fun ease(u: Float) = u * u * (3f - 2f * u)
 
+    private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
+
     /**
      * Stance (t in 0..0.6): the foot is planted and the leg swings from forward to back at the same
-     * rate the body moves, so the foot does not slide; the knee flexes only slightly.
-     * Swing (t in 0.6..1): the hip swings the leg forward while the KNEE BENDS (the shin folds back)
-     * and then straightens before the foot lands.
-     * Rotation is negative toward the facing direction (right); a positive knee angle folds the shin back.
+     * rate the body moves, so the foot does not slide; the heel lands (toe up), the foot goes flat,
+     * then the heel lifts at push-off. Swing (t in 0.6..1): the hip swings the leg forward while the
+     * knee bends smoothly (the shin folds back early) and straightens before the foot lands.
+     * Hip angle is negative toward the facing direction (right); a positive knee angle folds the shin back.
+     * [footSign] is +1 when the shoe points toward the walking direction and -1 when it points away
+     * (the left shoe in the artwork points left), so the heel/toe motion matches the shoe.
      */
-    private fun pose(hip: View?, knee: View?, t: Float) {
-        if (hip == null || knee == null) return
+    private fun pose(leg: BendLegView?, t: Float, footSign: Float) {
+        if (leg == null) return
         val reach = 14f
         val stance = 0.6f
         val pi = PI.toFloat()
+        val ankle: Float
         if (t < stance) {
             val k = t / stance
-            hip.rotation = -reach + 2f * reach * k
-            knee.rotation = 4f * sin(pi * k)
+            leg.hip = -reach + 2f * reach * k
+            leg.knee = 4f * sin(pi * k)
+            ankle = when {
+                k < 0.25f -> lerp(-9f, 0f, ease(k / 0.25f))
+                k < 0.7f -> 0f
+                else -> lerp(0f, 14f, ease((k - 0.7f) / 0.3f))
+            }
         } else {
             val u = (t - stance) / (1f - stance)
-            hip.rotation = reach - 2f * reach * ease(u)
-            knee.rotation = 32f * sin(pi * u)
+            leg.hip = reach - 2f * reach * ease(u)
+            leg.knee = 32f * sin(pi * Math.pow(u.toDouble(), 0.8).toFloat())
+            ankle = if (u < 0.5f) lerp(14f, 8f, u / 0.5f) else lerp(8f, -9f, ease((u - 0.5f) / 0.5f))
         }
+        leg.ankle = ankle * footSign
     }
 
     /** One animation frame, driven by the display's vsync (ValueAnimator), so motion is smooth. */
@@ -206,18 +244,33 @@ class OverlayController(private val app: Application) {
         // the other leg is offset by half a cycle, so there is a short moment with both feet down.
         phase += dt / 1200f
         phase -= kotlin.math.floor(phase)
-        pose(hipL, kneeL, phase)
-        pose(hipR, kneeR, (phase + 0.5f) % 1f)
-        upper?.rotation = 2f // slight forward lean; the lens ring leans with it
+        pose(legL, phase, -1f)
+        pose(legR, (phase + 0.5f) % 1f, 1f)
+        // Body: lowest while both feet are down, highest at mid-stance; slight alternating sway.
+        val s2 = sin(2f * PI.toFloat() * phase)
+        upper?.translationY = -s2 * s2 * 1.0f * dp
+        upper?.rotation = 2f + 1f * sin(2f * PI.toFloat() * phase)
 
         if (dragging) return
+        runTime += dt
+        if (turnT < 220f) { // turning around: stand still and squeeze the sprite through the flip
+            turnT += dt
+            box.scaleX = lerp(faceFrom, faceTo, ease((turnT / 220f).coerceAtMost(1f)))
+            return
+        }
         val screenW = app.resources.displayMetrics.widthPixels
         val w = if (v.width > 0) v.width else (BUBBLE_W * dp).toInt()
-        xf += dir * 34 * dp * dt / 1000f // matches the planted foot speed of the gait
+        val ramp = (runTime / 400f).coerceAtMost(1f) // gentle start
+        xf += dir * 17 * dp * ramp * dt / 1000f // matches the planted-foot speed of the gait at half size
         val maxX = (screenW - w).coerceAtLeast(0).toFloat()
-        if (xf >= maxX) { xf = maxX; dir = -1 }
-        if (xf <= 0f) { xf = 0f; dir = 1 }
-        box.scaleX = if (dir > 0) 1f else -1f // the artwork faces right; the lens ring flips with it
+        var turned = false
+        if (xf >= maxX) { xf = maxX; dir = -1; turned = true }
+        if (xf <= 0f) { xf = 0f; dir = 1; turned = true }
+        if (turned) {
+            faceFrom = box.scaleX
+            faceTo = if (dir > 0) 1f else -1f // the artwork faces right; the lens ring flips with it
+            turnT = 0f
+        }
         p.x = xf.toInt()
         try { wm.updateViewLayout(v, p) } catch (ex: Exception) { }
     }
@@ -274,20 +327,13 @@ class OverlayController(private val app: Application) {
         }
         fun full() = FrameLayout.LayoutParams(bw, bh, Gravity.TOP or Gravity.START)
 
-        // One leg = a hip container (rotates at the hip) holding the shin (rotates at the knee) behind
-        // the thigh, whose round cap hides the joint. Pivots are fractions of the artwork, measured on the pieces.
-        fun leg(thigh: Int, shin: Int, hipX: Float, hipY: Float, kneeX: Float, kneeY: Float): Pair<FrameLayout, ImageView> {
-            val shinV = layer(shin).apply { pivotX = kneeX * bw; pivotY = kneeY * bh }
-            val hip = FrameLayout(app).apply {
-                clipChildren = false
-                pivotX = hipX * bw; pivotY = hipY * bh
-                addView(shinV, full())
-                addView(layer(thigh), full())
-            }
-            return hip to shinV
+        // Each leg is one mesh-bent sprite (smooth knee). Placement inside the 321x800 artwork was measured.
+        fun leg(res: Int, offX: Float, offY: Float, kneeRow: Float, ankleRow: Float): BendLegView {
+            val bmp = BitmapFactory.decodeResource(app.resources, res, BitmapFactory.Options().apply { inScaled = false })
+            return BendLegView(app, bmp, offX, offY, kneeRow, ankleRow)
         }
-        val (hipRView, kneeRView) = leg(R.drawable.kashef_thigh_r, R.drawable.kashef_shin_r, 0.6881f, 0.7158f, 0.6849f, 0.8101f)
-        val (hipLView, kneeLView) = leg(R.drawable.kashef_thigh_l, R.drawable.kashef_shin_l, 0.3682f, 0.7158f, 0.2918f, 0.8101f)
+        val legRView = leg(R.drawable.kashef_legbend_r, 189f, 568f, 84.2f, 153f)
+        val legLView = leg(R.drawable.kashef_legbend_l, 0f, 568f, 84.2f, 153f)
 
         // Torso and the lens ring lean together, so the ring stays on the lens (lens: 70.9% across, 22.3% down).
         val upperView = FrameLayout(app).apply {
@@ -295,12 +341,12 @@ class OverlayController(private val app: Application) {
             pivotX = bw / 2f; pivotY = bh.toFloat()
         }
         upperView.addView(layer(R.drawable.kashef_torso), full())
-        val ringDp = 22
+        val ringDp = 11
         val lensRing = View(app).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(0x22E8B84A)
-                setStroke((3 * dp).toInt(), 0xFFE8B84A.toInt())
+                setStroke((2 * dp).toInt(), 0xFFE8B84A.toInt())
             }
             visibility = View.INVISIBLE
         }
@@ -312,8 +358,16 @@ class OverlayController(private val app: Application) {
             },
         )
         // Legs sit behind the torso so the coat hem hides the hips.
-        box.addView(hipRView, full())
-        box.addView(hipLView, full())
+        // Soft ground shadow under the feet so he does not look like he is floating.
+        val shadow = View(app).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x44000000)
+            }
+        }
+        box.addView(shadow, FrameLayout.LayoutParams((bw * 0.9f).toInt(), (5 * dp).toInt(), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+        box.addView(legRView, full())
+        box.addView(legLView, full())
         box.addView(upperView, full())
 
         val column = LinearLayout(app).apply {
@@ -388,10 +442,8 @@ class OverlayController(private val app: Application) {
         charBox = box
         ring = lensRing
         upper = upperView
-        hipL = hipLView
-        hipR = hipRView
-        kneeL = kneeLView
-        kneeR = kneeRView
+        legL = legLView
+        legR = legRView
         lp = params
         running = false
         lastName = ""
@@ -400,7 +452,7 @@ class OverlayController(private val app: Application) {
 
     fun hide() {
         main.removeCallbacks(autoHide)
-        stopAnims()
+        stopAnims(false)
         root?.let { try { wm.removeView(it) } catch (ex: Exception) { } }
         root = null
         bubble = null
@@ -408,10 +460,8 @@ class OverlayController(private val app: Application) {
         charBox = null
         ring = null
         upper = null
-        hipL = null
-        hipR = null
-        kneeL = null
-        kneeR = null
+        legL = null
+        legR = null
         lp = null
         running = false
         dragging = false

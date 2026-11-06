@@ -1,14 +1,9 @@
 # كاشف النصوص — Kashef Text Search
 
-المرحلة الأولى: الشخصية والتصميم فقط (الواجهة للعرض، البحث غير مفعّل).
+تطبيق أندرويد يبحث **داخل محتوى** الملفات النصية والأكواد في مجلدات تختارها، محليًا بلا حساب وبلا رفع.
 
-- applicationId: `com.kashef.textsearch`
-- البناء: GitHub Actions (`.github/workflows/build.yml`) — الناتج Artifact باسم `kashef-text-search-apk`
-
-## أسرار GitHub (اختيارية، لا تُكتب في الكود)
-`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`
-عند غيابها يُوقَّع APK بمفتاح debug.
-
-## إعلانات Start.io (مجهّزة ومعطّلة)
-تتفعّل فقط عند: متغير المستودع `ADS_ENABLED=true` + سرّ `STARTIO_APP_ID`.
-للتجربة فقط يمكن استعمال App ID التجريبي من توثيق Start.io، وإعلانات الاختبار تعمل تلقائيًا في debug.
+- الحزمة: `com.kashef.textsearch` — Kotlin وJetpack Compose، واجهة عربية RTL.
+- البحث: عبارة كاملة أو كل الكلمات أو أي كلمة؛ عربي وإنجليزي؛ فهرس محلي اختياري.
+- مدعوم: TXT وMD وCSV وJSON وXML وHTML والأكواد وDOCX وODT. غير مدعوم: PDF (استخراج العربية منه غير موثوق) وDOC وXLSX وOCR والبحث التقريبي.
+- البناء: GitHub Actions — راجع `.github/workflows/build.yml`.
+- التوقيع والإعلانات: `SIGNING_AND_ADS.md`. الاختبار: `TESTING.md`. التغييرات: `CHANGELOG.md`.

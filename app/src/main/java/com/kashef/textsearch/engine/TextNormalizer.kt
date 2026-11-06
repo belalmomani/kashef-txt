@@ -8,7 +8,7 @@ class Normalized(val text: String, val map: IntArray)
  *  - English letter case is ignored.
  *  - Arabic diacritics (tashkeel), tatweel and invisible direction marks are ignored.
  *  - Runs of spaces/tabs count as one space.
- *  - Punctuation DOES matter. Arabic letter forms (e.g. أ / ا) are NOT merged.
+ *  - Punctuation DOES matter. Arabic letter forms (e.g. أ / ا) are NOT merged, unless the user turns on "flexible" matching (fold = true).
  */
 object TextNormalizer {
     private fun isIgnorable(c: Char): Boolean =
@@ -16,7 +16,21 @@ object TextNormalizer {
             c == '\u200B' || c == '\u200C' || c == '\u200D' || c == '\u200E' || c == '\u200F' ||
             c == '\u061C' || c == '\uFEFF'
 
-    fun normalize(src: String): Normalized {
+    /**
+     * Optional "flexible" folding of Arabic/Persian spelling variants. It maps one character to one
+     * character, so positions (and highlight ranges) stay valid.
+     */
+    fun foldChar(c: Char): Char = when (c) {
+        'أ', 'إ', 'آ', 'ٱ' -> 'ا'
+        'ى', 'ی' -> 'ي'
+        'ة' -> 'ه'
+        'ؤ' -> 'و'
+        'ئ' -> 'ي'
+        'ک' -> 'ك'
+        else -> c
+    }
+
+    fun normalize(src: String, fold: Boolean = false): Normalized {
         val sb = StringBuilder(src.length)
         val map = IntArray(src.length)
         var n = 0
@@ -33,7 +47,8 @@ object TextNormalizer {
                 continue
             }
             lastSpace = false
-            sb.append(Character.toLowerCase(c))
+            val lc = Character.toLowerCase(c)
+            sb.append(if (fold) foldChar(lc) else lc)
             map[n++] = i
         }
         if (n > 0 && sb[n - 1] == ' ') {

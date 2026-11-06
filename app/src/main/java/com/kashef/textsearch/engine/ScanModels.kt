@@ -1,6 +1,19 @@
 package com.kashef.textsearch.engine
 
-data class FileResult(val name: String, val path: String, val matches: List<MatchLine>, val truncated: Boolean)
+/** One file with matches. [termsMatched]/[termsTotal] say how many query words occur somewhere in the file. */
+data class FileResult(
+    val name: String,
+    val path: String,
+    val matches: List<MatchLine>,
+    val truncated: Boolean,
+    val termsMatched: Int = 0,
+    val termsTotal: Int = 1,
+    val modified: Long = 0L,   // last-modified time in ms, 0 when the provider does not report it
+    val ext: String = "",
+    val root: String = "",     // the selected folder this file was found under
+    val uri: String = "",
+    val mime: String = "",
+)
 
 data class Problem(val path: String, val reason: String)
 
@@ -17,6 +30,8 @@ data class ScanSnapshot(
     val problems: List<Problem> = emptyList(),
     val completed: Boolean = false,
     val elapsedMs: Long = 0,
+    val skippedByIndex: Int = 0, // files ruled out by the local index without being read
+    val indexedNow: Int = 0,     // files added to / refreshed in the index during this pass
 )
 
 class ScanAccumulator {
@@ -33,6 +48,8 @@ class ScanAccumulator {
     var problemsTotal = 0
     var limitReached = false
     var stop = false
+    var skippedByIndex = 0
+    var indexedNow = 0
     var current = ""
     private val results = ArrayList<FileResult>()
     private val problems = ArrayList<Problem>()
@@ -55,5 +72,6 @@ class ScanAccumulator {
     fun snapshot(completed: Boolean, elapsedMs: Long) = ScanSnapshot(
         scanned, matchedFiles, matchCount, unsupportedDocs, otherSkipped, problemsTotal,
         limitReached, current, results.toList(), problems.toList(), completed, elapsedMs,
+        skippedByIndex, indexedNow,
     )
 }
