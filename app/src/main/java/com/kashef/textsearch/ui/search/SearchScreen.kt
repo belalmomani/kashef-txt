@@ -223,7 +223,7 @@ private fun StatusCard(ui: ScanUi) {
             )
         }
         if (s.unsupportedDocs > 0) {
-            Text("ملفات لم تُفحص لأن نوعها غير مدعوم بعد (PDF وDOC وXLSX وغيرها): ${s.unsupportedDocs}", color = Gold400, fontSize = 12.sp)
+            Text("ملفات لم تُفحص لأن نوعها غير مدعوم بعد (PDF وDOC وXLS وPPT وغيرها): ${s.unsupportedDocs}", color = Gold400, fontSize = 12.sp)
         }
         if (s.problemsTotal > 0) {
             Text("ملفات تعذرت قراءتها: ${s.problemsTotal}", color = Gold400, fontSize = 12.sp)

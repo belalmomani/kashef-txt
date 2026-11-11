@@ -12,12 +12,13 @@ sealed interface TextOpen {
 }
 
 /**
- * Turns a file into a plain-text stream. Plain files pass through unchanged. DOCX and ODT files are
- * converted paragraph by paragraph (one paragraph = one "line"), in logical reading order, which keeps
- * Arabic text reliable. PDF is NOT supported: Arabic text extraction from PDF is unreliable.
+ * Turns a file into a plain-text stream. Plain files pass through unchanged. DOCX, ODT, XLSX and PPTX
+ * are zipped XML packages whose text is stored in logical reading order, so they are converted to text:
+ * one paragraph (DOCX/ODT/PPTX) or one non-empty row (XLSX) becomes one "line".
+ * PDF is NOT supported: Arabic text extraction from PDF is unreliable.
  */
 object FileText {
-    val OFFICE_EXT = setOf("docx", "odt")
+    val OFFICE_EXT = setOf("docx", "odt", "xlsx", "pptx")
     const val MAX_XML_BYTES = 64 * 1024 * 1024
 
     private class TooBig : Exception()
@@ -35,25 +36,35 @@ object FileText {
         return TextOpen.Ready(ByteArrayInputStream(text.toByteArray(Charsets.UTF_8)))
     }
 
+    private fun wanted(ext: String, name: String): Boolean = when (ext) {
+        "docx" -> name == "word/document.xml" || name == "word/footnotes.xml" || name == "word/endnotes.xml"
+        "odt" -> name == "content.xml"
+        "xlsx" -> name == "xl/sharedStrings.xml" || (name.startsWith("xl/worksheets/sheet") && name.endsWith(".xml"))
+        "pptx" -> name.startsWith("ppt/slides/slide") && name.endsWith(".xml")
+        else -> false
+    }
+
     private fun extract(input: InputStream, ext: String, max: Int): String? {
-        fun wanted(name: String): Boolean =
-            if (ext == "docx") name == "word/document.xml" || name == "word/footnotes.xml" || name == "word/endnotes.xml"
-            else name == "content.xml"
-        val out = StringBuilder()
-        var found = false
+        // Parts are read first, because in XLSX the shared strings often come AFTER the sheets that use them.
+        val parts = LinkedHashMap<String, String>()
         var budget = max
         ZipInputStream(input).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                if (entry.isDirectory || !wanted(entry.name)) continue
-                found = true
+                if (entry.isDirectory || !wanted(ext, entry.name)) continue
                 val bytes = readCapped(zip, budget)
                 budget -= bytes.size
-                val xml = String(bytes, Charsets.UTF_8)
-                out.append(if (ext == "docx") docxText(xml) else odtText(xml))
+                parts[entry.name] = String(bytes, Charsets.UTF_8)
             }
         }
-        return if (found) out.toString().trimEnd('\n') else null
+        if (parts.isEmpty()) return null
+        val text = when (ext) {
+            "docx" -> parts.values.joinToString("") { docxText(it) }
+            "odt" -> parts.values.joinToString("") { odtText(it) }
+            "xlsx" -> xlsxText(parts)
+            else -> pptxText(parts)
+        }
+        return text.trimEnd('\n')
     }
 
     private fun readCapped(zip: ZipInputStream, budget: Int): ByteArray {
@@ -67,6 +78,11 @@ object FileText {
         }
         return bos.toByteArray()
     }
+
+    private fun numberIn(name: String): Int =
+        Regex("(\\d+)\\.xml$").find(name)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+
+    // ---------------- DOCX ----------------
 
     private val DOCX_TOKEN = Regex("<w:t(?:\\s[^>]*)?>([^<]*)</w:t>|<w:tab\\s*/>|<w:br\\s*/?>|<w:cr\\s*/?>|</w:p>")
 
@@ -88,6 +104,8 @@ object FileText {
         if (line.isNotEmpty()) sb.append(line).append('\n')
         return sb.toString()
     }
+
+    // ---------------- ODT ----------------
 
     private val ODT_TOKEN = Regex("</text:p>|</text:h>|<text:line-break\\s*/>|<text:tab\\s*/>|<text:s(?:\\s+text:c=\"(\\d+)\")?\\s*/>|<[^>]+>|([^<]+)")
 
@@ -121,6 +139,85 @@ object FileText {
         if (line.isNotEmpty()) sb.append(line).append('\n')
         return sb.toString()
     }
+
+    // ---------------- XLSX ----------------
+
+    private val SHARED_ITEM = Regex("<si\\s*/>|<si(?:\\s[^>]*)?>(.*?)</si>", RegexOption.DOT_MATCHES_ALL)
+    private val PHONETIC = Regex("<rPh[\\s>].*?</rPh>", RegexOption.DOT_MATCHES_ALL)
+    private val T_TAG = Regex("<t(?:\\s[^>]*)?>([^<]*)</t>")
+    // The self-closing form is tried first, so <row r="3"/> can never swallow the rows after it.
+    private val ROW = Regex("<row(?:\\s[^>]*)?/>|<row(?:\\s[^>]*)?>(.*?)</row>", RegexOption.DOT_MATCHES_ALL)
+    private val CELL = Regex("<c(?:\\s([^>]*?))?(?:/>|>(.*?)</c>)", RegexOption.DOT_MATCHES_ALL)
+    private val CELL_TYPE = Regex("\\bt=\"([^\"]*)\"")
+    private val CELL_VALUE = Regex("<v(?:\\s[^>]*)?>([^<]*)</v>")
+
+    /** Shared strings by index (an empty item still occupies its index). Rich-text runs are joined. */
+    fun sharedStrings(xml: String): List<String> =
+        SHARED_ITEM.findAll(xml).map { m ->
+            val body = PHONETIC.replace(m.groups[1]?.value ?: "", "")
+            T_TAG.findAll(body).joinToString("") { unescape(it.groupValues[1]) }
+        }.toList()
+
+    /** One line per non-empty row; the cells of a row are separated by a tab. Sheets follow each other. */
+    fun xlsxText(parts: Map<String, String>): String {
+        val shared = parts["xl/sharedStrings.xml"]?.let { sharedStrings(it) } ?: emptyList()
+        val sheets = parts.keys.filter { it.startsWith("xl/worksheets/sheet") }.sortedBy { numberIn(it) }
+        val sb = StringBuilder()
+        for (name in sheets) sb.append(sheetText(parts.getValue(name), shared))
+        return sb.toString()
+    }
+
+    fun sheetText(xml: String, shared: List<String>): String {
+        val sb = StringBuilder()
+        for (row in ROW.findAll(xml)) {
+            val body = row.groups[1]?.value ?: continue // a self-closing row is empty
+            val cells = ArrayList<String>()
+            for (c in CELL.findAll(body)) {
+                val attrs = c.groupValues[1]
+                val inner = c.groupValues[2]
+                val type = CELL_TYPE.find(attrs)?.groupValues?.get(1) ?: ""
+                val text = when (type) {
+                    "s" -> CELL_VALUE.find(inner)?.groupValues?.get(1)?.trim()?.toIntOrNull()?.let { shared.getOrNull(it) } ?: ""
+                    "inlineStr" -> T_TAG.findAll(inner).joinToString("") { unescape(it.groupValues[1]) }
+                    "e" -> "" // formula errors are not text
+                    else -> CELL_VALUE.find(inner)?.let { unescape(it.groupValues[1]) } ?: ""
+                }
+                if (text.isNotEmpty()) cells.add(text)
+            }
+            if (cells.isNotEmpty()) sb.append(cells.joinToString("\t")).append('\n')
+        }
+        return sb.toString()
+    }
+
+    // ---------------- PPTX ----------------
+
+    private val PPT_TOKEN = Regex("<a:t(?:\\s[^>]*)?>([^<]*)</a:t>|<a:br\\s*/?>|</a:p>")
+
+    /** PowerPoint: slides in numeric order, one paragraph per line. */
+    fun pptxText(parts: Map<String, String>): String {
+        val slides = parts.keys.filter { it.startsWith("ppt/slides/slide") }.sortedBy { numberIn(it) }
+        val sb = StringBuilder()
+        for (name in slides) sb.append(slideText(parts.getValue(name)))
+        return sb.toString()
+    }
+
+    fun slideText(xml: String): String {
+        val sb = StringBuilder()
+        val line = StringBuilder()
+        for (m in PPT_TOKEN.findAll(xml)) {
+            val tok = m.value
+            if (tok.startsWith("<a:t>") || tok.startsWith("<a:t ")) {
+                line.append(unescape(m.groupValues[1]))
+            } else { // end of paragraph or a line break
+                sb.append(line).append('\n')
+                line.setLength(0)
+            }
+        }
+        if (line.isNotEmpty()) sb.append(line).append('\n')
+        return sb.toString()
+    }
+
+    // ---------------- shared ----------------
 
     private val ENTITY = Regex("&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);")
 

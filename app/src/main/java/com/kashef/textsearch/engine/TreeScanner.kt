@@ -16,14 +16,14 @@ class ScopeFilter(val extensions: Set<String>, val countsUnsupportedDocs: Boolea
         private val TEXT = setOf(
             "txt", "md", "markdown", "csv", "tsv", "json", "xml", "html", "htm", "css", "js", "ts",
             "kt", "kts", "java", "py", "c", "cpp", "h", "cs", "go", "rs", "php", "rb", "sql", "sh",
-            "bat", "yml", "yaml", "ini", "cfg", "conf", "properties", "gradle", "log", "srt", "docx", "odt",
+            "bat", "yml", "yaml", "ini", "cfg", "conf", "properties", "gradle", "log", "srt", "docx", "odt", "xlsx", "pptx",
         )
         private val CODE = setOf(
             "js", "ts", "kt", "kts", "java", "py", "c", "cpp", "h", "cs", "go", "rs", "php", "rb",
             "sql", "sh", "bat", "xml", "html", "htm", "css", "json", "yml", "yaml", "gradle", "properties",
         )
         private val NOTES = setOf("txt", "md", "markdown", "csv", "log", "srt")
-        private val DOCS = setOf("txt", "docx", "odt") // PDF is not supported (Arabic PDF text extraction is unreliable)
+        private val DOCS = setOf("txt", "docx", "odt", "xlsx", "pptx") // PDF is not supported (Arabic PDF text extraction is unreliable)
 
         fun forIndex(i: Int): ScopeFilter = when (i) {
             1 -> ScopeFilter(DOCS, true)
@@ -51,7 +51,7 @@ class TreeScanner(
         private const val MAX_DEPTH = 30
         private const val MAX_FILE_BYTES = 30L * 1024 * 1024
         private const val MAX_PER_FILE = 50
-        private val UNSUPPORTED_DOC = setOf("pdf", "doc", "xls", "xlsx", "ppt", "pptx")
+        private val UNSUPPORTED_DOC = setOf("pdf", "doc", "xls", "ppt")
     }
 
     private class Entry(val id: String, val name: String, val isDir: Boolean, val size: Long, val mime: String, val modified: Long)

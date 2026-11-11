@@ -98,7 +98,7 @@ fun SettingsScreen(vm: SearchViewModel) {
 
         Section("حالة البحث") {
             Text(
-                "يبحث التطبيق داخل محتوى الملفات النصية (TXT, MD, CSV, JSON, XML, HTML) وملفات الأكواد ومستندات DOCX وODT في المجلدات التي تختارها. غير مدعوم بعد: PDF وDOC وXLSX وOCR.",
+                "يبحث التطبيق داخل محتوى الملفات النصية (TXT, MD, CSV, JSON, XML, HTML) وملفات الأكواد ومستندات DOCX وXLSX وPPTX وODT في المجلدات التي تختارها. غير مدعوم بعد: PDF وDOC وXLS وPPT وOCR.",
                 color = Gold400, fontSize = 13.sp,
             )
         }

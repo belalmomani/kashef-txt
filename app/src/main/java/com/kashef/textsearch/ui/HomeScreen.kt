@@ -73,8 +73,8 @@ private const val SAMPLE_QUERY = "المشروع يحتاج إلى قاعدة ب
 data class ScopeOption(val title: String, val subtitle: String, val icon: ImageVector)
 
 val scopes = listOf(
-    ScopeOption("كل الملفات النصية المتاحة", "TXT, MD, CSV, JSON, XML, DOCX, أكواد", Icons.Outlined.Description),
-    ScopeOption("المستندات", "TXT, DOCX, ODT", Icons.Outlined.PictureAsPdf),
+    ScopeOption("كل الملفات النصية المتاحة", "TXT, MD, CSV, JSON, XML, DOCX, XLSX, أكواد", Icons.Outlined.Description),
+    ScopeOption("المستندات", "TXT, DOCX, XLSX, PPTX, ODT", Icons.Outlined.PictureAsPdf),
     ScopeOption("ملفات البرمجة والأكواد", "Kotlin, Java, HTML, JSON, XML, JS", Icons.Outlined.Code),
     ScopeOption("الملاحظات والملفات النصية", "TXT, MD, CSV, LOG", Icons.Outlined.NoteAlt),
 )
@@ -141,7 +141,7 @@ fun HomeScreen(
                     color = TextSecondary, fontSize = 12.sp,
                 )
             }
-            Text("PDF وDOC وXLSX والصور الممسوحة (OCR) لم تُدعم بعد؛ تُفحص الملفات النصية والأكواد ومستندات DOCX وODT.", color = Gold400, fontSize = 11.sp)
+            Text("PDF وDOC وXLS وPPT والصور الممسوحة (OCR) لم تُدعم بعد؛ تُفحص الملفات النصية والأكواد ومستندات DOCX وXLSX وPPTX وODT.", color = Gold400, fontSize = 11.sp)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SearchMode.entries.forEach { m ->

@@ -141,4 +141,56 @@ class FeatureTest {
         assertEquals(r, CaseCodec.decode(CaseCodec.encode(r)))
         assertTrue(CaseReport.toText(r).contains("مطابقة مرنة"))
     }
+
+    // ---- XLSX / PPTX ----
+
+    private val xlsx = zip(
+        // the sheet comes BEFORE the shared strings it uses, as in many real files
+        "xl/worksheets/sheet1.xml" to (
+            "<worksheet><sheetData>" +
+                "<row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c></row>" +
+                "<row r=\"2\"><c r=\"A2\"><v>12345</v></c><c r=\"B2\" t=\"inlineStr\"><is><t>inline &amp; text</t></is></c><c r=\"C2\" s=\"1\"/></row>" +
+                "<row r=\"3\"/>" +
+                "<row r=\"4\"><c r=\"A4\" t=\"s\"><v>2</v></c></row>" +
+                "<row r=\"5\"><c r=\"A5\" t=\"s\"><v>3</v></c></row>" +
+                "</sheetData></worksheet>"
+            ),
+        "xl/sharedStrings.xml" to (
+            "<sst><si><t>المشروع يحتاج</t></si><si><r><t>إلى قاعدة </t></r><r><t>بيانات</t></r></si><si/><si><t>last</t></si></sst>"
+            ),
+    )
+
+    @Test fun xlsxSharedStringsRichTextAndEmptyItemsKeepTheirIndexes() {
+        assertEquals(listOf(1), searchOffice(xlsx, "xlsx", q(phrase)))   // two shared strings joined by a tab
+        assertEquals(listOf(3), searchOffice(xlsx, "xlsx", q("last")))   // index 3 is right after an empty <si/>
+    }
+
+    @Test fun xlsxNumbersInlineStringsAndSelfClosingRows() {
+        assertEquals(listOf(2), searchOffice(xlsx, "xlsx", q("12345")))
+        assertEquals(listOf(2), searchOffice(xlsx, "xlsx", q("inline & text")))
+        // a self-closing row yields no line and does not swallow the rows after it
+        assertEquals(3, FileText.sheetText(
+            "<row r=\"1\"><c><v>a</v></c></row><row r=\"2\"/><row r=\"3\"><c><v>b</v></c></row><row r=\"4\"><c><v>c</v></c></row>",
+            emptyList(),
+        ).trimEnd('\n').split('\n').size)
+    }
+
+    private val pptx = zip(
+        "ppt/slides/slide10.xml" to "<p:sld><a:p><a:r><a:t>last slide</a:t></a:r></a:p></p:sld>",
+        "ppt/slides/slide2.xml" to "<p:sld><a:p><a:r><a:t>second</a:t></a:r></a:p></p:sld>",
+        "ppt/slides/slide1.xml" to (
+            "<p:sld><a:p><a:r><a:t>Title</a:t></a:r></a:p>" +
+                "<a:p><a:r><a:t>المشروع يحتاج </a:t></a:r><a:r><a:t>إلى قاعدة بيانات</a:t></a:r><a:br/><a:r><a:t>A &amp; B</a:t></a:r></a:p></p:sld>"
+            ),
+    )
+
+    @Test fun pptxSlidesAreReadInNumericOrder() {
+        assertEquals(listOf(2), searchOffice(pptx, "pptx", q(phrase)))
+        assertEquals(listOf(3), searchOffice(pptx, "pptx", q("a & b")))
+        assertEquals(listOf(5), searchOffice(pptx, "pptx", q("last slide"))) // slide10 comes after slide2
+    }
+
+    @Test fun xlsxWithoutAnySheetIsRejected() {
+        assertTrue(FileText.open(ByteArrayInputStream(zip("xl/other.xml" to "<a/>")), "xlsx") is TextOpen.Failed)
+    }
 }
