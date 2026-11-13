@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kashef.textsearch.ads.AdManager
+import com.kashef.textsearch.diag.DiagLog
 import com.kashef.textsearch.ui.search.SearchViewModel
 import com.kashef.textsearch.ui.theme.CardNavy
 import com.kashef.textsearch.ui.theme.Cyan400
@@ -41,9 +42,11 @@ private enum class Confirm { Memory, Indexes, Folders, Everything }
 
 /** Privacy of the app's own data: what is stored and where, the ads/consent status, and deletion. */
 @Composable
-fun ProtectionScreen(vm: SearchViewModel) {
+fun ProtectionScreen(vm: SearchViewModel, onShare: (String, String) -> Unit) {
     val roots by vm.indexRoots.collectAsState()
     var confirm by remember { mutableStateOf<Confirm?>(null) }
+    var showLog by remember { mutableStateOf(false) }
+    var logLines by remember { mutableStateOf(listOf<String>()) }
     val indexFiles = roots.sumOf { it.files }
     val indexKb = (roots.sumOf { it.bytes } + 1023) / 1024
 
@@ -61,6 +64,7 @@ fun ProtectionScreen(vm: SearchViewModel) {
                 Line("ذاكرة المحقق", if (vm.memoryEnabled) "مفعّلة • ${vm.records.size} عملية (العبارة والتاريخ والأعداد فقط)" else "معطّلة • ${vm.records.size} عملية محفوظة سابقًا")
                 Line("الفهرس المحلي", if (roots.isEmpty()) "لا يوجد" else "${roots.size} مجلد • $indexFiles ملف • $indexKb كيلوبايت (بصمات مجزأة، لا نص مقروء)")
                 Line("الخيارات", "إعدادات صغيرة مثل كاشف فوق التطبيقات")
+                Line("سجل التشخيص", "أنواع الأعطال ومواضعها وأعداد البحث فقط (حتى 200 سطر)")
                 Text(
                     "لا يخزّن التطبيق أبدًا: محتوى الملفات، ولا نتائج البحث، ولا أسماء الملفات أو مساراتها في الذاكرة.",
                     color = Gold400, fontSize = 12.sp,
@@ -97,6 +101,35 @@ fun ProtectionScreen(vm: SearchViewModel) {
                         color = TextSecondary, fontSize = 11.sp,
                     )
                 }
+            }
+        }
+        item {
+            PCard {
+                Text("تقرير التشخيص", color = Cyan400, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "يسجّل التطبيق محليًا نوع الأعطال وموضعها في الكود وأعداد نتائج البحث فقط، بلا أسماء ملفات ولا محتواها ولا عبارات بحثك. " +
+                        "لا يُرسل شيئًا تلقائيًا؛ تشاركه أنت لمن تشاء، ويفيد المطوّر في إصلاح الأخطاء.",
+                    color = TextPrimary, fontSize = 12.sp,
+                )
+                OutlinedButton(
+                    onClick = { onShare("مشاركة تقرير التشخيص", vm.diagnosticsReport()) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("مشاركة تقرير التشخيص") }
+                OutlinedButton(
+                    onClick = {
+                        showLog = !showLog
+                        if (showLog) logLines = DiagLog.lines(15)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (showLog) "إخفاء آخر الأحداث" else "عرض آخر الأحداث") }
+                if (showLog) {
+                    if (logLines.isEmpty()) Text("لا أحداث مسجلة.", color = TextSecondary, fontSize = 11.sp)
+                    logLines.forEach { Text(it, color = TextSecondary, fontSize = 10.sp) }
+                }
+                OutlinedButton(
+                    onClick = { DiagLog.clear(); logLines = emptyList() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("مسح سجل التشخيص") }
             }
         }
         item {

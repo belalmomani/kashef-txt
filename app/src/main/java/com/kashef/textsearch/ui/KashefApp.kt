@@ -62,10 +62,10 @@ fun KashefApp(vm: SearchViewModel = viewModel()) {
             toast("لا يوجد تطبيق يستطيع فتح هذا الملف")
         }
     }
-    fun shareReport(text: String) {
+    fun shareText(title: String, text: String) {
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
         try {
-            ctx.startActivity(Intent.createChooser(send, "مشاركة التقرير").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            ctx.startActivity(Intent.createChooser(send, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: Exception) {
             toast("تعذرت المشاركة")
         }
@@ -98,7 +98,7 @@ fun KashefApp(vm: SearchViewModel = viewModel()) {
             val view = viewer
             val rep = report
             if (rep != null) {
-                ReportScreen(rep, onBack = vm::closeReport, onShare = { shareReport(CaseReport.toText(rep)) })
+                ReportScreen(rep, onBack = vm::closeReport, onShare = { shareText("مشاركة التقرير", CaseReport.toText(rep)) })
             } else if (tab == BottomTab.Search && view != null) {
                 ContextScreen(view, onBack = vm::closeViewer, onOpenExternal = { openExternal(view.uri, view.mime) })
             } else if (tab == BottomTab.Search && current != null) {
@@ -108,6 +108,7 @@ fun KashefApp(vm: SearchViewModel = viewModel()) {
                     onOpenContext = vm::openContext,
                     onOpenExternal = { r -> openExternal(r.uri, r.mime) },
                     onReport = vm::showReport,
+                    onShareText = ::shareText,
                 )
             } else if (tab == BottomTab.Search) {
                 HomeScreen(
@@ -120,7 +121,7 @@ fun KashefApp(vm: SearchViewModel = viewModel()) {
                     onStart = ::startSearch,
                 )
             } else if (tab == BottomTab.Protection) {
-                ProtectionScreen(vm)
+                ProtectionScreen(vm, onShare = ::shareText)
             } else if (tab == BottomTab.Files) {
                 FilesScreen(vm, onAddFolder = { picker.launch(null) })
             } else if (tab == BottomTab.Memory) {

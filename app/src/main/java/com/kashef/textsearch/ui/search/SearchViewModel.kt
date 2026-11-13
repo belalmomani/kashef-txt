@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
@@ -15,7 +16,9 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.kashef.textsearch.BuildConfig
 import com.kashef.textsearch.ads.AdManager
+import com.kashef.textsearch.diag.DiagLog
 import com.kashef.textsearch.engine.CaseRecord
 import com.kashef.textsearch.engine.FileResult
 import com.kashef.textsearch.engine.FileSearcher
@@ -304,11 +307,13 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                 // Forget files that no longer exist, only after a complete and error-free walk.
                 if (!acc.stop && scanner.listingFailures == 0) session.prune(scanner.visitedIds())
                 _index.value = IndexUi(label, false, acc.indexedNow, acc.scanned, acc.problemsTotal)
+                DiagLog.log("index", "done indexed=${acc.indexedNow} read=${acc.scanned} problems=${acc.problemsTotal}")
             } catch (e: CancellationException) {
                 try { session.flush() } catch (ex: Exception) { /* ignore */ }
                 _index.value = IndexUi(label, false, acc.indexedNow, acc.scanned, acc.problemsTotal, cancelled = true)
                 throw e
             } catch (e: Exception) {
+                DiagLog.error("index", e)
                 _index.value = IndexUi(label, false, acc.indexedNow, acc.scanned, acc.problemsTotal, message = e.message ?: e.javaClass.simpleName)
             } finally {
                 refreshStatsBlocking()
@@ -338,6 +343,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         clearRecords()
         deleteAllIndexes()
         removeAllFolders()
+        DiagLog.clear()
         prefs.edit().clear().apply()
         memoryEnabled = false
         overlayEnabled = true
@@ -418,6 +424,31 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         _report.value = null
     }
 
+    /** Counts and fixed reason categories only: no file names, paths, contents or search phrases. */
+    private fun searchSummary(u: ScanUi): String {
+        val s = u.snap
+        val reasons = s.problems.groupingBy { it.reason }.eachCount().entries.joinToString("; ") { "${it.key}×${it.value}" }
+        return "stage=${u.stage} scanned=${s.scanned} matched=${s.matchedFiles} problems=${s.problemsTotal} " +
+            "skippedByIndex=${s.skippedByIndex} unsupported=${s.unsupportedDocs} ms=${s.elapsedMs}" +
+            if (reasons.isNotEmpty()) " reasons=[$reasons]" else ""
+    }
+
+    /** A text report the user can share with the developer. It contains no file names, paths, contents or phrases. */
+    fun diagnosticsReport(): String {
+        val sb = StringBuilder()
+        sb.append("تقرير تشخيص كاشف النصوص\n")
+        sb.append("الإصدار: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n")
+        sb.append("أندرويد: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) • الجهاز: ${Build.MANUFACTURER} ${Build.MODEL}\n")
+        sb.append(
+            "الإعدادات: ذاكرة=$memoryEnabled • مرن=$flexible • فوق التطبيقات=${overlayEnabled && overlay.canDraw()} • " +
+                "مجلدات=${folders.size} • فهارس=${_indexRoots.value.size} • إعلانات=${AdManager.configured()}\n",
+        )
+        _ui.value?.let { sb.append("آخر بحث: ").append(searchSummary(it)).append('\n') }
+        sb.append("\nآخر الأحداث (بلا أسماء ملفات ولا محتوى):\n")
+        DiagLog.lines(60).forEach { sb.append(it).append('\n') }
+        return sb.toString()
+    }
+
     fun start() {
         val foldOn = flexible
         val q = SearchQuery.create(query, mode, foldOn) ?: return
@@ -447,6 +478,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
             val u = make(stage, completed, msg)
             _ui.value = u
             saveRecord(u.toRecord())
+            DiagLog.log("search", searchSummary(u))
         }
         _ui.value = ScanUi(
             ScanStage.Running, acc.snapshot(false, 0), shownQuery, title, modeLabel, "",
@@ -481,6 +513,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                 if (!closed) finish(ScanStage.Cancelled, false)
                 throw e
             } catch (e: Exception) {
+                DiagLog.error("search", e)
                 finish(ScanStage.Failed, false, e.message ?: e.javaClass.simpleName)
             }
         }
@@ -503,6 +536,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } catch (e: Exception) {
+                DiagLog.error("viewer", e)
                 null
             }
             val cur = _viewer.value

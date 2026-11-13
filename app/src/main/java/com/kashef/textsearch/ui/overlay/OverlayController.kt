@@ -24,6 +24,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.kashef.textsearch.R
+import com.kashef.textsearch.diag.DiagLog
 import com.kashef.textsearch.ui.search.ScanStage
 import com.kashef.textsearch.ui.search.ScanUi
 import com.kashef.textsearch.ui.search.dialogue
@@ -434,6 +435,7 @@ class OverlayController(private val app: Application) {
         try {
             wm.addView(column, params)
         } catch (ex: Exception) {
+            DiagLog.error("overlay", ex)
             return false
         }
         root = column

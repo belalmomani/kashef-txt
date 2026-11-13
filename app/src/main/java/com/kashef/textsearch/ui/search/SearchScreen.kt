@@ -31,6 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -98,6 +99,7 @@ fun SearchScreen(
     onOpenContext: (FileResult, Int) -> Unit,
     onOpenExternal: (FileResult) -> Unit,
     onReport: () -> Unit,
+    onShareText: (String, String) -> Unit,
 ) {
     BackHandler { onBack() }
     val s = ui.snap
@@ -117,9 +119,10 @@ fun SearchScreen(
     var exts by remember { mutableStateOf(setOf<String>()) }
     var roots by remember { mutableStateOf(setOf<String>()) }
     var days by remember { mutableStateOf(0) }
-    val shown = remember(s.results, sort, exts, roots, days) {
+    var narrow by remember { mutableStateOf("") }
+    val shown = remember(s.results, sort, exts, roots, days, narrow) {
         val since = if (days > 0) System.currentTimeMillis() - days * 86_400_000L else 0L
-        ResultOps.apply(s.results, Filters(exts, roots, since), sort)
+        ResultOps.apply(s.results, Filters(exts, roots, since, narrow), sort)
     }
 
     LazyColumn(
@@ -178,13 +181,24 @@ fun SearchScreen(
                     exts = exts, onExts = { exts = it },
                     roots = roots, onRoots = { roots = it },
                     days = days, onDays = { days = it },
+                    narrow = narrow, onNarrow = { narrow = it },
                 )
             }
             item {
-                Text(
-                    "طابور المشتبه بهم (${shown.size} من ${s.results.size})",
-                    color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "طابور المشتبه بهم (${shown.size} من ${s.results.size})",
+                            color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedButton(
+                            onClick = { onShareText("مشاركة النتائج", ResultOps.toText(shown, ui.query)) },
+                            enabled = shown.isNotEmpty(),
+                        ) { Text("مشاركة") }
+                    }
+                    Text("المشاركة تتضمن مقتطفات من ملفاتك؛ اختر وجهتها بعناية.", color = TextSecondary, fontSize = 10.sp)
+                }
             }
             itemsIndexed(shown, key = { _, r -> r.uri.ifEmpty { r.path } }) { i, r ->
                 ResultCard(i + 1, r, onOpenContext, onOpenExternal)
@@ -331,12 +345,20 @@ private fun FiltersCard(
     exts: Set<String>, onExts: (Set<String>) -> Unit,
     roots: Set<String>, onRoots: (Set<String>) -> Unit,
     days: Int, onDays: (Int) -> Unit,
+    narrow: String, onNarrow: (String) -> Unit,
 ) {
     val extList = results.map { it.ext }.filter { it.isNotEmpty() }.distinct().sorted().take(10)
     val rootList = results.map { it.root }.filter { it.isNotEmpty() }.distinct().sorted()
     val hasDates = results.any { it.modified > 0 }
     Card {
         Text("ترتيب وتصفية النتائج", color = Cyan400, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        OutlinedTextField(
+            value = narrow,
+            onValueChange = onNarrow,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("ضيّق النتائج بكلمة (اسم الملف أو المقتطف)") },
+        )
         ChipRow {
             FilterChipBtn("الأفضل تطابقًا", sort == SortMode.Relevance) { onSort(SortMode.Relevance) }
             FilterChipBtn("الأحدث", sort == SortMode.Newest) { onSort(SortMode.Newest) }
